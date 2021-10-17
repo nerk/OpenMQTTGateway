@@ -1107,7 +1107,18 @@ void PublishDeviceData(JsonObject& BLEdata, bool processBLEData) {
 #  if !pubKnownBLEServiceData
       RemoveJsonPropertyIf(BLEdata, "servicedata", BLEdata.containsKey("model") && BLEdata.containsKey("servicedata"));
 #  endif
+#  if !pubBLEManufacturerData
+      RemoveJsonPropertyIf(BLEdata, "manufacturerdata", BLEdata.containsKey("model") && BLEdata.containsKey("manufacturerdata"));
+#  endif
       pubBT(BLEdata);
+    } else {
+#  if !pubUnknownBLEServiceData
+      Log.trace(F("Unknown service data, removing it" CR));
+      RemoveJsonPropertyIf(BLEdata, "servicedata", BLEdata.containsKey("servicedata"));
+#  endif
+#  if !pubUnknownBLEManufacturerData
+      RemoveJsonPropertyIf(BLEdata, "manufacturerdata", BLEdata.containsKey("model") && BLEdata.containsKey("manufacturerdata"));
+#  endif
     }
   } else if (BLEdata.containsKey("distance")) {
     pubBT(BLEdata);
@@ -1116,36 +1127,15 @@ void PublishDeviceData(JsonObject& BLEdata, bool processBLEData) {
   }
 }
 
-JsonObject& process_bledata(JsonObject BLEdata) {
-  const char* mac = BLEdata["id"].as<const char*>();
-  BLEdevice* device = getDeviceByMac(mac);
+void process_bledata(JsonObject& BLEdata) {
   if (decoder.decodeBLEJson(BLEdata)) {
     Log.trace(F("1decoder found device: %s" CR), BLEdata["model"].as<const char*>());
-#  if !pubKnownBLEServiceData
-    Log.trace(F("Unknown service data, removing it" CR));
-    if (BTdata.containsKey("servicedata"))
-      BLEdata.remove("servicedata");
-#  endif
-#  if !pubBLEManufacturerData
-    if (BTdata.containsKey("manufacturerdata"))
-      BLEdata.remove("manufacturerdata");
-#  endif
   } else {
     Log.trace(F("No device found " CR));
     while (1) {
       taskYIELD();
     }
-#  if !pubUnknownBLEServiceData
-    Log.trace(F("Unknown service data, removing it" CR));
-    if (BTdata.containsKey("servicedata"))
-      BLEdata.remove("servicedata");
-#  endif
-#  if !pubUnknownBLEManufacturerData
-    if (BTdata.containsKey("manufacturerdata"))
-      BLEdata.remove("manufacturerdata");
-#  endif
   }
-  return BLEdata;
 }
 
 void hass_presence(JsonObject& HomePresence) {
