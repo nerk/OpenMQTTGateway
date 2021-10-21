@@ -229,7 +229,7 @@ void MQTTtoRF(char* topicOri, JsonObject& RFdata) { // json object decoding
         Log.error(F("MQTTtoRF Fail json" CR));
       }
     }
-    enableActiveReceiver();
+    enableActiveReceiver(false);
   }
 }
 #  endif
