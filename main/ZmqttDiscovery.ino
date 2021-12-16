@@ -73,7 +73,6 @@ void createDiscoveryFromList(const char* mac,
                              const char* device_manufacturer,
                              const char* device_model) {
   for (int i = 0; i < sensorCount; i++) {
-    Log.trace(F("CreateDiscoverySensor %s" CR), sensorList[i][1]);
     String discovery_topic = String(subjectBTtoMQTT) + "/" + String(mac);
     String unique_id = String(mac) + "-" + sensorList[i][1];
 
@@ -101,18 +100,9 @@ void createDiscoveryFromList(const char* mac,
  * @param device_model          Valid only if gateway entry is false, The model of the device.
  * @param device_mac            Valid only if gateway entry is false, The connection of the device to the outside world
  */
-void announceDeviceTrigger(bool use_gateway_info,
-                           char* topic,
-                           char* type,
-                           char* subtype,
-                           char* unique_id,
-                           char* device_name,
-                           char* device_manufacturer,
-                           char* device_model,
-                           char* device_mac) {
+void announceDeviceTrigger(bool use_gateway_info, char* topic, char* type, char* subtype, char* unique_id, char* device_name, char* device_manufacturer, char* device_model, char* device_mac) {
   //Create The Json
-  const int JSON_MSG_CALC_BUFFER = JSON_OBJECT_SIZE(14) + JSON_OBJECT_SIZE(5) + JSON_ARRAY_SIZE(1);
-  StaticJsonDocument<JSON_MSG_CALC_BUFFER> jsonBuffer;
+  StaticJsonDocument<JSON_MSG_BUFFER> jsonBuffer;
   JsonObject sensor = jsonBuffer.to<JsonObject>();
 
   // SET Default Configuration
@@ -151,7 +141,6 @@ void announceDeviceTrigger(bool use_gateway_info,
   if (use_gateway_info) {
     char JSONmessageBuffer[JSON_MSG_BUFFER];
     serializeJson(modules, JSONmessageBuffer, sizeof(JSONmessageBuffer));
-    Log.notice(F("Received json : %s" CR), JSONmessageBuffer);
 
     device["name"] = gateway_name;
     device["model"] = JSONmessageBuffer;
@@ -195,6 +184,7 @@ void announceDeviceTrigger(bool use_gateway_info,
 
   /* Publish on the topic */
   String topic_to_publish = String(discovery_Topic) + "/device_automation/" + String(unique_id) + "/config";
+  Log.trace(F("Announce Device Trigger  %s" CR), topic_to_publish.c_str());
   pub_custom_topic((char*)topic_to_publish.c_str(), sensor, true);
 }
 
@@ -232,8 +222,7 @@ void createDiscovery(const char* sensor_type,
                      const char* payload_available, const char* payload_not_avalaible, bool gateway_entity, const char* cmd_topic,
                      const char* device_name, const char* device_manufacturer, const char* device_model, const char* device_mac, bool retainCmd,
                      const char* state_class) {
-  const int JSON_MSG_CALC_BUFFER = JSON_OBJECT_SIZE(14) + JSON_OBJECT_SIZE(5) + JSON_ARRAY_SIZE(1);
-  StaticJsonDocument<JSON_MSG_CALC_BUFFER> jsonBuffer;
+  StaticJsonDocument<JSON_MSG_BUFFER> jsonBuffer;
   JsonObject sensor = jsonBuffer.to<JsonObject>();
 
   // If a component cannot render it's state (f.i. KAKU relays) no state topic
@@ -287,46 +276,54 @@ void createDiscovery(const char* sensor_type,
     sensor["cmd_t"] = command_topic; //command_topic
   }
 
+  StaticJsonDocument<JSON_MSG_BUFFER> jsonDeviceBuffer;
+  JsonObject device = jsonDeviceBuffer.to<JsonObject>();
+  JsonArray identifiers = device.createNestedArray("identifiers");
+
   if (gateway_entity) {
-    StaticJsonDocument<JSON_MSG_BUFFER> jsonDeviceBuffer;
-    JsonObject device = jsonDeviceBuffer.to<JsonObject>();
-    char JSONmessageBuffer[JSON_MSG_BUFFER];
-    serializeJson(modules, JSONmessageBuffer, sizeof(JSONmessageBuffer));
-    Log.notice(F("Received json : %s" CR), JSONmessageBuffer);
-    device["name"] = gateway_name;
-    device["model"] = JSONmessageBuffer;
+    //device representing the board
+    String model = "";
+    serializeJson(modules, model);
+    device["name"] = String(gateway_name);
+    device["model"] = model;
     device["manufacturer"] = DEVICEMANUFACTURER;
     device["sw_version"] = OMG_VERSION;
-    JsonArray identifiers = device.createNestedArray("identifiers");
-    identifiers.add(getMacAddress());
-    sensor["device"] = device; //device representing the board
+    identifiers.add(String(getMacAddress()));
   } else {
+    //Device representing the actual sensor/switch device
+    //The Device ID
     char deviceid[13];
     memcpy(deviceid, &unique_id[0], 12);
     deviceid[12] = '\0';
-    StaticJsonDocument<JSON_MSG_BUFFER> jsonDeviceBuffer;
-    JsonObject device = jsonDeviceBuffer.to<JsonObject>();
+    identifiers.add(deviceid);
+
+    //The Connections
     if (device_mac[0] != 0) {
       JsonArray connections = device.createNestedArray("connections");
       JsonArray connection_mac = connections.createNestedArray();
       connection_mac.add("mac");
       connection_mac.add(device_mac);
     }
-    JsonArray identifiers = device.createNestedArray("identifiers");
-    identifiers.add(deviceid);
+
     if (device_manufacturer[0]) {
       device["manufacturer"] = device_manufacturer;
     }
+
     if (device_model[0]) {
       device["model"] = device_model;
     }
+
     if (device_name[0]) {
       device["name"] = device_name;
     }
-    device["via_device"] = gateway_name; //device name of the board
-    sensor["device"] = device; //device representing the actual sensor/switch device
+
+    device["via_device"] = String(gateway_name); //device name of the board
   }
+
+  sensor["device"] = device;
+
   String topic = String(discovery_Topic) + "/" + String(sensor_type) + "/" + String(unique_id) + "/config";
+  Log.trace(F("Announce Device %s on  %s" CR), String(sensor_type).c_str(), topic.c_str());
   pub_custom_topic((char*)topic.c_str(), sensor, true);
 }
 
@@ -501,7 +498,6 @@ void pubMqttDiscovery() {
   };
 
   for (int i = 0; i < BMEparametersCount; i++) {
-    Log.trace(F("CreateDiscoverySensor" CR));
     //trc(BMEsensor[i][1]);
     createDiscovery(BMEsensor[i][0],
                     BMETOPIC, BMEsensor[i][1], (char*)getUniqueId(BMEsensor[i][1], BMEsensor[i][2]).c_str(),
@@ -524,7 +520,6 @@ void pubMqttDiscovery() {
   };
 
   for (int i = 0; i < HTUparametersCount; i++) {
-    Log.trace(F("CreateDiscoverySensor" CR));
     //trc(HTUsensor[i][1]);
     createDiscovery(HTUsensor[i][0],
                     HTUTOPIC, HTUsensor[i][1], (char*)getUniqueId(HTUsensor[i][1], HTUsensor[i][2]).c_str(),
@@ -547,7 +542,6 @@ void pubMqttDiscovery() {
   };
 
   for (int i = 0; i < AHTparametersCount; i++) {
-    Log.trace(F("CreateDiscoverySensor" CR));
     createDiscovery(AHTsensor[i][0],
                     AHTTOPIC, AHTsensor[i][1], (char*)getUniqueId(AHTsensor[i][1], AHTsensor[i][2]).c_str(),
                     will_Topic, AHTsensor[i][3], AHTsensor[i][4],
@@ -569,7 +563,6 @@ void pubMqttDiscovery() {
   };
 
   for (int i = 0; i < DHTparametersCount; i++) {
-    Log.trace(F("CreateDiscoverySensor" CR));
     //trc(DHTsensor[i][1]);
     createDiscovery(DHTsensor[i][0],
                     DHTTOPIC, DHTsensor[i][1], (char*)getUniqueId(DHTsensor[i][1], DHTsensor[i][2]).c_str(),
@@ -587,7 +580,6 @@ void pubMqttDiscovery() {
   char* ADCsensor[8] = {"sensor", "adc", "", "", jsonAdc, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(ADCsensor[1]);
   createDiscovery(ADCsensor[0],
                   ADCTOPIC, ADCsensor[1], (char*)getUniqueId(ADCsensor[1], ADCsensor[2]).c_str(),
@@ -610,7 +602,6 @@ void pubMqttDiscovery() {
   };
 
   for (int i = 0; i < BH1750parametersCount; i++) {
-    Log.trace(F("CreateDiscoverySensor" CR));
     //trc(BH1750sensor[i][1]);
     createDiscovery(BH1750sensor[i][0],
                     subjectBH1750toMQTT, BH1750sensor[i][1], (char*)getUniqueId(BH1750sensor[i][1], BH1750sensor[i][2]).c_str(),
@@ -634,7 +625,6 @@ void pubMqttDiscovery() {
   };
 
   for (int i = 0; i < TSL2561parametersCount; i++) {
-    Log.trace(F("CreateDiscoverySensor" CR));
     //trc(TSL2561sensor[i][1]);
     createDiscovery(TSL2561sensor[i][0],
                     subjectTSL12561toMQTT, TSL2561sensor[i][1], (char*)getUniqueId(TSL2561sensor[i][1], TSL2561sensor[i][2]).c_str(),
@@ -652,7 +642,6 @@ void pubMqttDiscovery() {
   char* HCSR501sensor[8] = {"binary_sensor", "hcsr501", "", "", jsonPresence, "true", "false", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(HCSR501sensor[1]);
   createDiscovery(HCSR501sensor[0],
                   subjectHCSR501toMQTT, HCSR501sensor[1], (char*)getUniqueId(HCSR501sensor[1], HCSR501sensor[2]).c_str(),
@@ -669,7 +658,6 @@ void pubMqttDiscovery() {
   char* GPIOInputsensor[8] = {"binary_sensor", "GPIOInput", "", "", jsonGpio, INPUT_GPIO_ON_VALUE, INPUT_GPIO_OFF_VALUE, ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(GPIOInputsensor[1]);
   createDiscovery(GPIOInputsensor[0],
                   subjectGPIOInputtoMQTT, GPIOInputsensor[1], (char*)getUniqueId(GPIOInputsensor[1], GPIOInputsensor[2]).c_str(),
@@ -692,7 +680,6 @@ void pubMqttDiscovery() {
   };
 
   for (int i = 0; i < INA226parametersCount; i++) {
-    Log.trace(F("CreateDiscoverySensor" CR));
     //trc(INA226sensor[i][1]);
     createDiscovery(INA226sensor[i][0],
                     subjectINA226toMQTT, INA226sensor[i][1], (char*)getUniqueId(INA226sensor[i][1], INA226sensor[i][2]).c_str(),
@@ -715,7 +702,6 @@ void pubMqttDiscovery() {
   char* actuatorONOFF[8] = {"switch", "actuatorONOFF", "", "", "", "{\"cmd\":1}", "{\"cmd\":0}", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(actuatorONOFF[1]);
   createDiscovery(actuatorONOFF[0],
                   subjectGTWONOFFtoMQTT, actuatorONOFF[1], (char*)getUniqueId(actuatorONOFF[1], actuatorONOFF[2]).c_str(),
@@ -733,7 +719,6 @@ void pubMqttDiscovery() {
   char* gatewayRF[8] = {"sensor", "gatewayRF", "", "", jsonVal, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(gatewayRF[1]);
   createDiscovery(gatewayRF[0],
                   subjectRFtoMQTT, gatewayRF[1], (char*)getUniqueId(gatewayRF[1], gatewayRF[2]).c_str(),
@@ -752,7 +737,6 @@ void pubMqttDiscovery() {
   char* gatewayRF2[8] = {"sensor", "gatewayRF2", "", "", jsonAddress, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(gatewayRF2[1]);
   createDiscovery(gatewayRF2[0],
                   subjectRF2toMQTT, gatewayRF2[1], (char*)getUniqueId(gatewayRF2[1], gatewayRF2[2]).c_str(),
@@ -770,7 +754,6 @@ void pubMqttDiscovery() {
   char* gatewayRFM69[8] = {"sensor", "gatewayRFM69", "", "", jsonVal, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(gatewayRFM69[1]);
   createDiscovery(gatewayRFM69[0],
                   subjectRFM69toMQTT, gatewayRFM69[1], (char*)getUniqueId(gatewayRFM69[1], gatewayRFM69[2]).c_str(),
@@ -788,7 +771,6 @@ void pubMqttDiscovery() {
   char* gatewayLORA[8] = {"sensor", "gatewayLORA", "", "", jsonMsg, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(gatewayLORA[1]);
   createDiscovery(gatewayLORA[0],
                   subjectLORAtoMQTT, gatewayLORA[1], (char*)getUniqueId(gatewayLORA[1], gatewayLORA[2]).c_str(),
@@ -806,7 +788,6 @@ void pubMqttDiscovery() {
   char* gatewaySRFB[8] = {"sensor", "gatewaySRFB", "", "", jsonVal, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(gatewaySRFB[1]);
   createDiscovery(gatewaySRFB[0],
                   subjectSRFBtoMQTT, gatewaySRFB[1], (char*)getUniqueId(gatewaySRFB[1], gatewaySRFB[2]).c_str(),
@@ -824,7 +805,6 @@ void pubMqttDiscovery() {
   char* gatewayPilight[8] = {"sensor", "gatewayPilight", "", "", jsonMsg, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(gatewayPilight[1]);
   createDiscovery(gatewayPilight[0],
                   subjectPilighttoMQTT, gatewayPilight[1], (char*)getUniqueId(gatewayPilight[1], gatewayPilight[2]).c_str(),
@@ -842,7 +822,6 @@ void pubMqttDiscovery() {
   char* gatewayIR[8] = {"sensor", "gatewayIR", "", "", jsonVal, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(gatewayIR[1]);
   createDiscovery(gatewayIR[0],
                   subjectIRtoMQTT, gatewayIR[1], (char*)getUniqueId(gatewayIR[1], gatewayIR[2]).c_str(),
@@ -860,7 +839,6 @@ void pubMqttDiscovery() {
   char* gateway2G[8] = {"sensor", "gateway2G", "", "", jsonMsg, "", "", ""};
   //component type,name,availability topic,device class,value template,payload on, payload off, unit of measurement
 
-  Log.trace(F("CreateDiscoverySensor" CR));
   //trc(gateway2G[1]);
   createDiscovery(gateway2G[0],
                   subject2GtoMQTT, gateway2G[1], (char*)getUniqueId(gateway2G[1], gateway2G[2]).c_str(),
