@@ -153,6 +153,7 @@ enum ble_val_type {
 struct BLEAction {
   std::string value;
   char addr[18];
+  int addr_type;
   NimBLEUUID service;
   NimBLEUUID characteristic;
   bool write;
@@ -164,11 +165,23 @@ struct BLEAction {
 
 struct BLEdevice {
   char macAdr[18];
+  int macType;
   bool isDisc;
   bool isWhtL;
   bool isBlkL;
   bool connect;
-  std::string sensorModel_id;
+  int sensorModel_id;
+};
+
+class BLEconectable {
+public:
+  enum id {
+    MIN = 1000,
+    LYWSD03MMC,
+    MHO_C401,
+    DT24_BLE,
+    MAX,
+  };
 };
 
 JsonObject& getBTJsonObject(const char* json = NULL, bool haPresenceEnabled = true);
